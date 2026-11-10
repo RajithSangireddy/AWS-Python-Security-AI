@@ -1,6 +1,7 @@
 
 from botocore.exceptions import BotoCoreError
 from src.error_handler import error_handler
+
 def list_iam_users(iam):
     #iam = session.client("iam")
     users =[]
