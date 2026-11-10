@@ -26,4 +26,14 @@ def create_aws_session(name_of_profile: str):
         error_code = error.response["Error"]["Code"]
         raise RuntimeError(f"AWS API request failed: {error_code}") from error
 
+    #Client error looks like this
+    #{
+    #"Error": {
+    #    "Code": "AccessDenied",
+    #    "Message": "User is not authorized to perform this action"
+    #},
+    #"ResponseMetadata": {
+    #    "HTTPStatusCode": 403
+    #} }
+
     return session

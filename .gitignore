@@ -9,3 +9,5 @@ __pycache__/
 *.tfvars
 *.tfvars.json
 *.code-workspace
+*.py[cod]
+.pytest_cache/
