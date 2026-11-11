@@ -3,7 +3,7 @@
 **Project:** Cloud Security Automation Platform  
 **Module:** 02 — IAM Collector  
 **Status:** Core implementation completed; initial tests passing; additional failure-path tests deferred  
-**Updated:** November 9, 2026
+**Updated:** November 10, 2026
 
 > This is a learning journal as well as a technical record. Code fragments illustrate concepts and may not exactly match the latest local repository. The repository source remains authoritative.
 
@@ -423,3 +423,219 @@ git push origin HEAD
 ```
 
 Adjust the `git add` paths to include any other intentionally changed source, `.gitignore`, or `requirements.txt` files after reviewing `git status`. Do **not** commit `.venv`, secrets, AWS credentials, or unrelated scratch files. The Git push must be executed in the user's local repository; generating this journal does not push it automatically.
+
+## 13. AWS API response samples and Python data-structure walkthroughs
+
+> **All identities, dates, tokens, and key IDs below are synthetic learning examples, not real AWS data.** API responses are abbreviated to highlight their shape. Actual Boto3 responses may contain additional fields (such as `ResponseMetadata`); Stubber tests may require schema-valid values. These examples describe the data flow, not full implementations.
+
+### Example A — `list_users`: outer dictionary, inner list of dictionaries
+
+```python
+page = {
+    "Users": [
+        {"UserName": "alice", "UserId": "AIDAEXAMPLE000001", "Arn": "arn:aws:iam::123456789012:user/alice"},
+        {"UserName": "bob", "UserId": "AIDAEXAMPLE000002", "Arn": "arn:aws:iam::123456789012:user/bob"},
+    ],
+    "IsTruncated": False,
+}
+
+# Types: page -> dict; page["Users"] -> list; page["Users"][0] -> dict
+users = []
+for user in page["Users"]:
+    users.append(user)
+
+print(users[0]["UserName"])  # alice
+```
+
+**Why:** AWS returns a response dictionary with a `Users` collection. We accumulate user *records* in a list. `users.append(user)` adds a whole dictionary as one element; `users.extend(page["Users"])` is another valid way to add all users in the page. `users.update(...)` does not work because `list` has no `update` method. Using a single dictionary's `.update(user)` repeatedly would overwrite fields like `UserName` rather than retain separate users.
+
+### Example B — Two paginator pages and the continuation marker
+
+```python
+page1 = {
+    "Users": [{"UserName": "alice"}, {"UserName": "bob"}],
+    "IsTruncated": True,
+    "Marker": "next-page-token",
+}
+page2 = {
+    "Users": [{"UserName": "charlie"}],
+    "IsTruncated": False,
+}
+
+users = []
+for page in (page1, page2):  # Illustration only: production uses Boto3 paginator
+    users.extend(page["Users"])
+
+print([u["UserName"] for u in users])  # ['alice', 'bob', 'charlie']
+```
+
+**Why:** Each page is a dictionary, each `Users` value is a list, and the final inventory is a single accumulated list. In a real paginator, Boto3 follows `IsTruncated`/`Marker` and makes the subsequent API request. The marker is not a user attribute. In Stubber, the second response must be registered with expected parameters `{"Marker": "next-page-token"}` when that is the first page's marker.
+
+### Example C — `list_access_keys`: list of key metadata dictionaries
+
+```python
+response = {
+    "AccessKeyMetadata": [
+        {
+            "UserName": "alice",
+            "AccessKeyId": "AKIAEXAMPLE00000001",
+            "Status": "Active",
+            "CreateDate": "2026-01-15T10:30:00Z",  # Readable illustration; Boto3 uses datetime
+        },
+        {
+            "UserName": "alice",
+            "AccessKeyId": "AKIAEXAMPLE00000002",
+            "Status": "Inactive",
+            "CreateDate": "2025-06-10T08:00:00Z",
+        },
+    ],
+    "IsTruncated": False,
+}
+
+keys = []
+keys.extend(response["AccessKeyMetadata"])
+print(len(keys))                   # 2
+print(keys[1]["Status"])          # Inactive
+```
+
+**Why:** One IAM user can have multiple keys. A list keeps those as distinct records. Each key dictionary stores fields describing *that key*. The real Boto3 `CreateDate` is a `datetime` object, which must be serialized explicitly when writing JSON.
+
+### Example D — `get_access_key_last_used`: nested AWS response to flat usage dictionary
+
+```python
+aws_response = {
+    "UserName": "alice",
+    "AccessKeyLastUsed": {
+        "LastUsedDate": "2026-10-01T12:00:00Z",  # Boto3 normally returns datetime
+        "ServiceName": "s3",
+        "Region": "us-east-1",
+    },
+}
+
+last_used = aws_response["AccessKeyLastUsed"]
+usage = {
+    "last_used_at": last_used.get("LastUsedDate"),
+    "last_used_service": None if last_used.get("ServiceName") == "N/A" else last_used.get("ServiceName"),
+    "last_used_region": None if last_used.get("Region") == "N/A" else last_used.get("Region"),
+}
+```
+
+**Why:** The AWS API's nested `AccessKeyLastUsed` dictionary becomes a flat, application-defined dictionary with predictable names. For never-used keys, AWS may omit `LastUsedDate` and return `"N/A"` for service/region; our normalized values use `None`. This usage dictionary describes one requested key, not a collection of all keys.
+
+### Example E — Merge metadata and usage without changing the original
+
+```python
+key = {
+    "UserName": "alice",
+    "AccessKeyId": "AKIAEXAMPLE00000001",
+    "Status": "Active",
+}
+usage = {
+    "last_used_at": None,
+    "last_used_service": None,
+    "last_used_region": None,
+}
+
+combined = key.copy()  # Shallow copy: new outer dictionary
+combined.update(usage)
+
+print(key)       # Still only the original three fields
+print(combined)  # Original three fields plus three usage fields
+```
+
+**Why:** `.copy()` prevents adding usage fields directly to the original metadata dictionary. `.update()` is appropriate here because we want *one* record containing different named attributes. If both dictionaries contain the same key, the value from `usage` replaces the value in `combined`. A shallow copy does not recursively clone nested objects.
+
+### Example F — Normalized access-key record: one dictionary; inventory: list of dictionaries
+
+```python
+normalized_key = {
+    "username": "alice",
+    "access_key_id": "AKIAEXAMPLE00000001",
+    "status": "Active",
+    "created_at": "2026-01-15T10:30:00Z",
+    "last_used_at": None,
+    "last_used_service": None,
+    "last_used_region": None,
+}
+
+normalized_keys = []
+normalized_keys.append(normalized_key)
+print(normalized_keys[0]["access_key_id"])  # AKIAEXAMPLE00000001
+```
+
+**Why:** `normalize_access_key` transforms AWS field names such as `AccessKeyId` into our stable schema such as `access_key_id`. The function returns one dictionary for one key; the caller appends that record to a list of all normalized keys. Dates are strings in this *illustration* for readability; our current collector retains Boto3 date values unless explicitly serialized.
+
+### Example G — Explicitly build a dictionary indexed by username
+
+```python
+users = [
+    {"UserName": "alice", "UserId": "AIDAEXAMPLE000001"},
+    {"UserName": "bob", "UserId": "AIDAEXAMPLE000002"},
+]
+users_by_name = {}
+for user in users:
+    users_by_name[user["UserName"]] = user
+
+print(users_by_name["bob"]["UserId"])  # AIDAEXAMPLE000002
+```
+
+**Why:** A dictionary lookup by username is useful if we repeatedly search for a specific user. Python does **not** infer the key from the first field; we create the mapping ourselves. For future multi-account data, the same username can occur in different AWS accounts, so account ID must be considered in lookup keys.
+
+### Example H — Stubber: fake response, request parameters, and pagination assertions
+
+```python
+# Abbreviated teaching example: schema-valid full user records are required in actual tests.
+stubber.add_response("list_users", page1, {})
+stubber.add_response("list_users", page2, {"Marker": "next-page-token"})
+with stubber:
+    result = list_iam_users(iam)
+stubber.assert_no_pending_responses()
+assert len(result) == 3
+```
+
+**Why:** Each `add_response` queues one fake service response for the *same* injected IAM client. The first paginator call has no marker; the second sends the marker from page 1. `assert_no_pending_responses()` confirms every queued response was consumed. If page 1 says `IsTruncated=False`, page 2 remains unused and the assertion fails. If the expected marker differs from the actual request, Stubber raises a parameter-mismatch error. This is a *conceptual* example: use the schema-valid response objects from `tests/test_collector.py` when running it.
+
+### Example I — Expected AWS error: successful negative test
+
+```python
+# Example to implement later; not among the three verified passing tests.
+stubber.add_client_error(
+    "list_users",
+    service_error_code="AccessDenied",
+    service_message="Not authorized to call iam:ListUsers",
+)
+with stubber:
+    with pytest.raises(RuntimeError, match="AccessDenied"):
+        list_iam_users(iam)
+```
+
+**Why:** The simulated AWS API raises `ClientError`; the collector wraps it as `RuntimeError`. The test **passes** if the expected exception occurs, because rejecting an unauthorized operation is the intended behavior. `pytest` must be imported. This is a deferred test example, not a verified result.
+
+### Example J — Incomplete pagination must not look like a complete inventory
+
+```text
+Page 1 -> 2 users collected locally
+Page 2 -> 2 more users collected locally
+Page 3 -> AWS ClientError
+         -> error_handler raises RuntimeError
+         -> list_iam_users does not return its local list
+```
+
+**Why:** `append` and `extend` modify the local list as each page arrives, but an uncaught propagated exception stops execution before the final `return users`. The caller does not receive a successful partial result. If a higher-level orchestration layer wants partial-results behavior later, it must define that explicitly, including how incompleteness is represented.
+
+### Quick reference: which structure did we choose?
+
+| Data | Python shape | Why |
+|---|---|---|
+| Single Boto3 API page | `dict` | Named response fields and metadata |
+| Page's `Users` | `list[dict]` | Multiple user records |
+| All collected users | `list[dict]` | Accumulated records across pages |
+| One access-key metadata record | `dict` | Named fields for one key |
+| All access keys | `list[dict]` | Multiple keys per user / across users |
+| One key's usage details | `dict` | One set of named usage attributes |
+| Combined/normalized key | `dict` | One cohesive key record |
+| All normalized keys | `list[dict]` | Collection of normalized records |
+| Optional username lookup index | `dict[str, dict]` | Explicit key-based lookup when needed |
+
+**Review questions:** Why is `page["Users"]` a list? When would `.extend()` replace `.append()`? Why does `.update()` make sense for merging one key's metadata with usage but not for accumulating multiple users? What happens if page 3 fails? Why does the Stubber's second request include `Marker`?
+
