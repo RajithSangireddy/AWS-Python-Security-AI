@@ -94,7 +94,7 @@ def collect_aws_iam_inventory(iam):
     return iam_inventory
 ```
 
-**Latest `main.py` integration, as shown in the screenshot:**
+**`main.py` integration:**
 
 ```python
 from src.auth import create_aws_session
@@ -105,7 +105,7 @@ iam = session.client("iam")
 iam_inventory = collect_aws_iam_inventory(iam)
 ```
 
-The screenshot also shows older imports and temporary debug output. Those can be cleaned up after confirming nothing else in `main.py` uses them.
+Remove any unused imports or temporary debugging output once the integration is verified.
 
 ## 4. Python learning discussions and examples
 
@@ -127,22 +127,57 @@ all_keys.extend(new_keys)
 
 `append()` adds one object, even if that object is a list. `extend()` iterates the supplied iterable and adds each element. For a flat IAM key inventory, use `extend()`.
 
-### 4.2 `copy()` and `update()`
+### 4.2 `copy()` and `update()` — enriching access-key data
 
-**Question:** How can usage fields be added without changing the raw AWS key metadata?
+**Question:** How can we combine AWS access-key metadata with last-used details without changing the original metadata?
+
+`list_user_access_keys()` provides `UserName`, `AccessKeyId`, `Status`, and `CreateDate`. The `get_access_key_usage()` function supplies `last_used_at`, `last_used_service`, and `last_used_region`. We want those usage fields in the **same enriched dictionary** while retaining the original record in `iam_inventory["access_keys"]`.
+
+**Before enrichment — access-key metadata:**
 
 ```python
-raw_key = {"AccessKeyId": "KEY1", "Status": "Active"}
-usage = {"last_used_at": None, "last_used_service": None}
-
-key_with_usage = raw_key.copy()
-key_with_usage.update(usage)
-
-assert "last_used_at" not in raw_key
-assert "last_used_at" in key_with_usage
+{
+    "UserName": "alice",
+    "AccessKeyId": "AKIAEXAMPLE00000001",
+    "Status": "Active",
+    "CreateDate": datetime.datetime(2023, 3, 22, 20, 1, 3, tzinfo=tzutc()),
+}
 ```
 
-`.copy()` creates a new outer dictionary; `.update()` mutates that new dictionary. Note that `.copy()` is **shallow**: nested mutable objects are still shared, which is acceptable for the flat fields in this example.
+**Our orchestration code:**
+
+```python
+access_key_id = key["AccessKeyId"]
+key_with_usage = key.copy()
+key_with_usage.update(get_access_key_usage(iam, access_key_id))
+normalized_keys.append(normalize_access_key(key_with_usage))
+```
+
+**After `update()` — metadata plus usage fields:**
+
+```python
+{
+    "UserName": "alice",
+    "AccessKeyId": "AKIAEXAMPLE00000001",
+    "Status": "Active",
+    "CreateDate": datetime.datetime(2023, 3, 22, 20, 1, 3, tzinfo=tzutc()),
+    "last_used_at": None,
+    "last_used_service": None,
+    "last_used_region": None,
+}
+```
+
+The same example access-key ID is used before and after to show that **one record was enriched**, not replaced by another record. The `None` values illustrate missing last-used information in our normalized usage fields.
+
+**What we learned:**
+
+- `key.copy()` makes a **shallow copy** of the original dictionary. Updating the copy does not add fields to the original outer dictionary. Nested mutable objects would still be shared.
+- `key_with_usage.update(usage)` adds the usage key-value pairs **in place**; if a field name already exists, the incoming value overwrites it.
+- `dict.update()` returns `None`, not the updated dictionary. Do not write `key_with_usage = key_with_usage.update(usage)`.
+- `update()` does **not** save to disk or a database. It changes the dictionary in memory.
+- We retain raw AWS metadata in `iam_inventory["access_keys"]` and send the enriched copy through `normalize_access_key()` for `iam_inventory["normalized_keys"]`.
+
+This copy-and-enrich pattern will also be useful when combining IAM roles, trust policies, and future security findings.
 
 ### 4.3 Fixing a naming/call mistake
 
@@ -184,7 +219,7 @@ Production code should not rely on temporary development assertions as its main 
 
 ## 5. Live AWS integration results
 
-The latest screenshot shows `main.py` using `collect_aws_iam_inventory(iam)` successfully, with:
+A live AWS run using `collect_aws_iam_inventory(iam)` returned:
 
 | Resource | Count |
 | --- | ---: |
@@ -409,4 +444,4 @@ git push
 - How should `AssumeRolePolicyDocument` be represented for later trust-policy analysis?
 - How can we extend the existing inventory without breaking consumers expecting the original three keys?
 
-**Completion criteria for Module 03:** `main.py` calls the orchestrator; live AWS collection succeeds; the generated orchestration tests pass locally; the repository contains this journal. The first two are confirmed from the screenshot; the last two require your local run and commit.
+**Completion criteria for Module 03:** `main.py` calls the orchestrator; live AWS collection succeeds; the generated orchestration tests pass locally; the repository contains this journal. The integration run was successful; test execution should be confirmed locally.
