@@ -1,73 +1,91 @@
 # Cloud Security Automation Platform — Project Plan & Status
 
-**Last updated:** 2026-11-09  
-**Project strategy:** AWS-first, end-to-end delivery. GCP is explicitly deferred to Phase 2.  
-**Status legend:** Complete / Implemented (testing incomplete) / In progress / Planned / Deferred.
+**Last updated:** 2026-11-12  
+**Strategy:** AWS-first end-to-end platform; GCP deferred to Phase 2.  
+**Evidence policy:** "Passed" means reported local test success, not an independently audited production release.
 
 ## 1. Mission
 
-Build a portfolio-quality, cost-conscious, read-only AWS security automation platform. Collect cloud identity and security data, analyze and prioritize risks, produce reports, automate testing and deployment, and integrate AI to explain and correlate findings. Develop independent Python/software architecture skills by implementing small pieces with senior-engineer-style design reviews.
+Build a portfolio-quality, cost-conscious, read-only AWS security automation platform. Collect IAM/security data, detect and explain risks, report findings, automate tests and deployment, and add a grounded AI assistant. Develop independent Python and software-design skills by implementing features with review rather than receiving full solutions.
 
-**Phase 1 must reach an end-to-end AWS demonstration including GitHub Actions, security scanners, Docker, Kubernetes, Argo CD, and AI integration before GCP work starts.** GCP is Phase 2, not part of Module 03.
+**Phase 1 ends only after an AWS end-to-end demonstration with GitHub Actions, AppSec scanners, Docker, Kubernetes, Argo CD, and AI integration. No GCP development until then.**
 
-## 2. Non-negotiable engineering principles
+## 2. Engineering and learning principles
 
-- Least privilege; assume an AWS audit role; prefer read-only APIs and never embed real credentials.
-- Local-first development; temporary cloud infrastructure and teardown to control cost.
-- Fail closed on incomplete inventories; propagate collection errors rather than silently returning partial scans.
-- Separate authentication, resource collection, inventory orchestration, analysis, reporting, and deployment responsibilities.
-- Normalize data for analysis, but do not prematurely build a generic multicloud abstraction.
-- Automated tests for critical paths, with deferred coverage tracked explicitly.
-- Human review and approval for any future remediation; AI suggestions are not autonomous changes.
-- **Teaching approach:** The user writes code; mentor gives requirements, trade-offs, pseudocode, focused hints, and code review. No full implementations unless explicitly requested.
+- Least privilege: assume an AWS audit role; never embed credentials or perform remediation without human approval.
+- Local-first and cost-conscious: prefer temporary infrastructure and teardown.
+- Fail closed: collection errors propagate; do not present partial inventories as complete scans.
+- Separate authentication, collectors, normalization, inventory orchestration, rules, reporting, and deployment.
+- Keep AWS-specific models until cross-cloud requirements justify abstraction.
+- Test critical success paths and failures; explicitly track missing coverage.
+- User writes production Python; mentor provides design prompts, pseudocode, review, and targeted hints. AI may generate pytest/mock scaffolding to avoid spending disproportionate time on mocking syntax.
+- Periodically assess **independent implementation**, not just whether guided code runs.
 
 ## 3. Current status snapshot
 
-| Area | Status | Evidence / next action |
+| Area | Status | Evidence / remaining work |
 |---|---|---|
-| Module 00 — Master plan | In progress | This document establishes the tracked roadmap. |
-| Module 01 — AWS authentication | Complete (core) | `src/auth.py`; named `security-audit` profile; AssumeRole/STS verified. |
-| Module 02 — IAM collector | Implemented (testing incomplete) | IAM users, keys, last-used details, normalization, pagination, API/SDK error handling. |
-| Module 02 — pytest | In progress | Three tests passed: success, empty users, two-page pagination. Additional tests deferred. |
-| Module 02 — learning journal | Complete | `02-IAM-Collector-Learning-Journal.md` exists; verify it is committed. |
-| Module 03 — AWS inventory orchestration | Next | Move correlation/orchestration out of `main.py` into an AWS-specific function. |
-| AWS IAM analysis and reporting | Planned / partial scaffolding | `analyzer.py` and `reporter.py` appear in repository; implementation not independently verified. |
-| AppSec scanners and CI/CD | Planned | Checkov, Semgrep, pip-audit, Gitleaks, Trivy; GitHub Actions. |
-| Docker, Terraform, Kubernetes, Argo CD | Planned | AWS-first end-to-end pipeline; choose affordable cluster/deployment target before provisioning. |
-| AI security assistant | Planned | Correlate, explain, and prioritize AWS/AppSec findings with guardrails. |
-| Phase 2 — GCP | Deferred | Begin only after AWS + Argo CD + AI milestone is achieved. |
+| Module 00 — Plan | Updated | Roadmap and learning progress revised after Module 04. |
+| Module 01 — AWS Authentication | Complete (core) | `src/auth.py`, `security-audit` named profile, AssumeRole/STS verification. |
+| Module 02 — Users / Access Keys | Implemented; additional coverage deferred | Paginated collection, usage, normalization, API/SDK errors; original 3 user-collector tests passed; other edge cases remain. |
+| Module 03 — IAM Inventory Orchestration | Complete (core) | `src/aws_inventory.py`; raw users/keys and normalized keys; copied key enriched with usage; mocked orchestration tests reported passing. |
+| Module 04 — IAM Roles & Trust Policies | Complete (module scope) | `list_iam_roles`, trust-statement normalization, inventory integration; live result 34 roles; 7/7 role-focused tests reported passed. |
+| Module 05 — IAM Permissions & Policies | **Next** | Define policy/attachment scope and implement in small independent steps. |
+| Security analyzer / findings schema / reporting | Planned | Existing placeholder/scaffolding files do not establish completed functionality. |
+| AppSec, CI/CD, Docker, Terraform, Kubernetes, Argo CD | Planned | No deployment completion claimed. |
+| AI findings assistant | Planned | Grounded explanations, correlation, prioritization, no autonomous remediation. |
+| Phase 2 — GCP | Deferred | Only after AWS end-to-end milestone. |
 
-**Progress reporting:** Do not treat placeholder files as finished functionality. Three passing collector tests do not imply full collector test coverage. Overall completion percentage is intentionally not asserted without a reviewed scope/effort baseline.
+**Scope caution:** The 7 passing tests are Module 04-focused. They do not prove all older Module 02 cases, every IAM trust-policy shape, or production readiness. No precise overall completion percentage is asserted without an effort baseline.
 
-## 4. Phase 1 — AWS-first implementation roadmap
+## 4. Phase 1 — Revised module roadmap
 
-| Module | Deliverable | Definition of done | Current status |
+The **2026-11-09 draft** assigned Module 04 to analysis, Module 05 to reporting, and Module 06 to broader IAM inventory. Actual implementation changed that order. The following numbering supersedes the earlier proposal and keeps already-used chat/module IDs stable.
+
+| Module | Deliverable | Definition of done | Status |
 |---|---|---|---|
-| 01 — Authentication | Reusable Boto3 session using audit-role profile | STS identity verified; predictable auth errors | Complete (core) |
-| 02 — IAM Collector | Users, access keys, last-used metadata, pagination, normalization | Functional collector; initial tests; documented deferred edge cases | Implemented; remaining tests deferred |
-| 03 — AWS IAM Inventory Orchestration | `collect_aws_iam_inventory(iam)` or equivalent AWS-specific workflow | `main.py` delegates; users and normalized keys correlated; coherent return structure; focused tests | Next |
-| 04 — AWS Security Analyzer | Findings for unused/old keys, statuses and selected IAM risks | Rules are configurable, explainable, deterministic and tested | Planned |
-| 05 — Reporting & Findings Schema | Machine-readable JSON and human-readable summary | Stable schema, severity/evidence, sample output, tests | Planned |
-| 06 — Broader AWS IAM Inventory | IAM roles, trust policies, attached/inline policies and relevant relationships | Paginated collection, normalization, errors, tests | Planned |
-| 07 — AppSec Integration | Semgrep, Checkov, pip-audit, Gitleaks, Trivy | Repeatable local scans; ingest/normalize findings; safe CI behavior | Planned |
-| 08 — CI/CD & Containerization | Docker image and GitHub Actions pipeline | Lint/test/scan/build; secrets protected; reproducible builds | Planned |
-| 09 — Infrastructure & GitOps | Terraform, Kubernetes deployment, Argo CD | Ephemeral deployment; GitOps sync; observability; teardown and cost controls | Planned |
-| 10 — AI Findings Assistant | AI explanation, deduplication/correlation, prioritization | Grounded evidence, explicit uncertainty, prompt-injection controls, no autonomous remediation | Planned |
-| 11 — AWS End-to-End Release | Working AWS collection → findings → reports → pipeline → deployment → AI | Demonstration, documentation, tests, architecture diagram, cost/security review | Planned |
+| 01 — Authentication | Reusable Boto3 session | STS verified; auth failures handled | Complete (core) |
+| 02 — IAM Users & Keys | Users, keys, last-used, normalization | Paginated collectors and tests | Implemented; coverage follow-up |
+| 03 — Inventory Orchestration | `collect_aws_iam_inventory(iam)` | Thin `main.py`, coherent raw/normalized inventory, mock tests | Complete (core) |
+| 04 — IAM Roles & Trust Policies | Paginated roles, extracted trust statements | Real-account validation; focused tests; journal | Code/tests complete; journal produced with this update |
+| 05 — IAM Permissions & Policies | Role-attached managed policies, inline policies and selected permission relationships | Define scope, collect with pagination, normalize, integrate, test | Next |
+| 06 — Security Analyzer | IAM security rules including key and trust/permission risks | Deterministic, explainable findings with evidence/tests | Planned |
+| 07 — Findings Schema & Reporting | JSON and human-readable reports | Stable schema, severity/evidence, samples, tests | Planned |
+| 08 — AppSec Integration | Semgrep, Checkov, pip-audit, Gitleaks, Trivy | Repeatable local/CI scans; normalized results | Planned |
+| 09 — CI/CD & Containerization | GitHub Actions, Docker | Lint/test/scan/build; protected secrets | Planned |
+| 10 — Infrastructure & GitOps | Terraform, Kubernetes, Argo CD | Ephemeral deploy, sync, observability, teardown | Planned |
+| 11 — AI Findings Assistant | Evidence-grounded analysis and correlation | Explicit uncertainty and prompt-injection controls | Planned |
+| 12 — AWS End-to-End Release | Full demo and portfolio documentation | Tested collection → findings → report → deployment → AI | Planned |
 
-Module numbering is a planning proposal after Module 03 and may be revised as dependencies become clearer. **No GCP implementation in Phase 1.**
+## 5. Verified design and implementation through Module 04
 
-### Module 03 — precise scope
+### Module 03 inventory contract
 
-**Goal:** Refactor the IAM user/access-key/usage coordination currently in `main.py` into a testable AWS inventory orchestration function/module (e.g., `src/aws_inventory.py`).
+```python
+{
+    "users": [...],
+    "access_keys": [...],
+    "normalized_keys": [...],
+    "roles": [...],
+    "normalized_roles": [...],
+}
+```
 
-**In scope:** choose function signature; return structure for users and normalized keys; preserve key-to-usage correlation; propagate errors; keep `main.py` thin; test orchestration using existing collector interfaces.
+- `main.py` creates the session/client and delegates to `collect_aws_iam_inventory(iam)`.
+- Access-key usage is merged into `key.copy()` with `.update(...)`, preserving raw records.
+- Empty categories remain empty lists rather than missing keys.
+- Roles are **lists of dictionaries**, not keyed only by RoleName, so future cross-account identity does not depend on globally unique role names.
+- Normalized roles currently contain `role_name`, `role_arn`, and `trust_statements`; the last is always a list. This is extraction and shape normalization, **not** full principal/action/condition normalization.
+- Live role collector returned 34 role dictionaries after correcting an `extend()` mistake; role-specific suite reported **7/7 passed** on 2026-11-12.
 
-**Out of scope:** GCP collection, multicloud orchestrator, generic provider framework, AI, Kubernetes, Argo CD, broad IAM-role support. These are later modules.
+### Test status and deferred coverage
 
-**Suggested design discussion:** Should the function return `{"users": [...], "access_keys": [...]}` or another explicit structure? How should account metadata be represented? When does a class become justified? Have the user propose a design before code is written.
+- Module 02: original user collector success/empty/two-page tests passed; broader key/usage/network/access-denied tests were deferred.
+- Module 03: user shared updated `test_aws_inventory.py` with mocked roles, empty inventory, multiple users/keys, no keys, and propagation tests; user reported tests passing. Its parametrized failures did not originally include `list_iam_roles`.
+- Module 04: separate role-focused suite reported 7 passing tests, covering role behavior and integration. Treat this as focused regression evidence, not exhaustive IAM validation.
+- Before production claims: review error propagation in all collectors, response shape assumptions, permission-boundary handling, and full-suite results.
 
-## 5. Phase 2 — GCP expansion (after AWS end-to-end milestone)
+## 6. Phase 2 — GCP expansion (after AWS end-to-end milestone)
 
 1. Evaluate which Phase 1 AWS contracts are genuinely reusable.
 2. Add GCP authentication and read-only project/service-account/IAM collectors.
@@ -75,7 +93,7 @@ Module numbering is a planning proposal after Module 03 and may be revised as de
 4. Add provider-specific orchestration and only then a lightweight multicloud coordinator if needed.
 5. Extend tests, deployment configuration, AI correlation, and reports to GCP.
 
-## 6. Module 01 and 02 learning record
+## 7. Module 01 and 02 learning record
 
 ### Module 01 — authentication
 
@@ -99,38 +117,56 @@ Module numbering is a planning proposal after Module 03 and may be revised as de
 
 **Detailed source:** `02-IAM-Collector-Learning-Journal.md` and Module 01 authentication notes. Keep these as separate, detailed learning journals; this plan is the project index.
 
-## 7. Immediate checklist
+## 8. Python skill-development checkpoint (2026-11-12)
 
-- [ ] Restore pagination test to `IsTruncated=True` and confirm all three tests pass.
-- [ ] Review `git status`, `.gitignore`, and pending source changes.
-- [ ] Commit Module 02 collector, error handler, tests and learning journal.
-- [ ] Add this project plan to repository and link it from `README.md`.
-- [ ] Start a new chat: **03 — AWS IAM Inventory Orchestration**.
-- [ ] In Module 03, begin with design/return-value choices, not a full implementation.
-- [ ] Revisit deferred Module 02 tests before treating the AWS inventory as production-ready.
+**Observed strengths:** AWS/IAM domain knowledge; understanding and reviewing existing Python; Boto3 API usage; growing familiarity with list/dict nesting, pagination, function boundaries, raw vs normalized data, and debugging with `type()`/`pprint()`.
 
-## 8. GitHub workflow
+**Still developing:** implementing a feature from a blank file without a template; anticipating unusual input structures and failure modes; choosing data structures without extended prompting; independently identifying meaningful test scenarios. Test mocking syntax is deliberately not the main learning goal.
 
-From repository root:
+**Specific evidence:** Changing `append(role)` to `extend(role)` when `role` was a dictionary produced 260 dictionary-key strings rather than 34 role dictionaries. Corrected to `extend(page["Roles"])`. Implemented `isinstance(statements, dict)` then `[statements]` to keep a consistent trust-statement list. Questioned why normalized records should duplicate raw data, leading to a lean role record with ARN identity.
+
+**Teaching adjustment for Module 05:** User first states function contract, input/output examples, algorithm and failure behavior; user writes production implementation; mentor reviews and hints; AI supplies most pytest/mock scaffolding. Include one small independent exercise and compare performance against this checkpoint. No numeric proficiency score should be treated as a formal assessment.
+
+## 9. Immediate checklist
+
+- [x] Module 03 inventory orchestration implemented and tested at core level.
+- [x] Module 04 roles/trust-policy code integrated into inventory.
+- [x] Live role collection validated: 34 roles.
+- [x] Module 04 focused tests: 7/7 reported passing.
+- [x] Prepare Module 04 learning journal and Module 05 handoff.
+- [ ] Place generated Markdown files in repository and verify relative README links.
+- [ ] Run full test suite: `python -m pytest -v`; investigate any regressions.
+- [ ] Review `git status`, `git diff --check`, `.gitignore` and stage intended files only.
+- [ ] Commit/push Module 04 code, tests, journal, and updated plan.
+- [ ] Start Module 05 in a new chat using its starter context.
+- [ ] Revisit deferred Module 02 coverage before calling the platform production-ready.
+
+## 10. GitHub workflow
+
+From repository root (adjust paths to your actual layout):
 
 ```powershell
-python -m pytest tests/test_collector.py -v
+python -m pytest -v
 git status
 git diff --check
-git add 00-PROJECT-PLAN-AND-STATUS.md
-git commit -m "docs: add AWS-first project roadmap and status"
+git add 00-PROJECT-PLAN-AND-STATUS.md docs/04-iam-roles-trust-policies.md docs/05-module-starter.md
+git status
+git commit -m "docs: close IAM roles module and update AWS roadmap"
 git push origin HEAD
 ```
 
-If other intended Module 02 changes are still uncommitted, review and stage them separately or in a deliberate combined commit. Never commit `.venv`, secrets, real access keys, or local credential files.
+Stage source and test changes separately if they have not already been committed. Never commit `.venv`, AWS credentials, secrets, or real access keys.
 
-## 9. Suggested README links
+## 11. Suggested README documentation links
 
 ```markdown
 ## Project documentation
 - [Project plan and status](00-PROJECT-PLAN-AND-STATUS.md)
-- [Module 01 — Authentication](01-authentication.md)
-- [Module 02 — IAM Collector](02-IAM-Collector-Learning-Journal.md)
+- [Module 01 — Authentication](docs/01-authentication.md)
+- [Module 02 — IAM Collector](docs/02-IAM-Collector-Learning-Journal.md)
+- [Module 03 — AWS IAM Inventory](docs/03-aws-inventory.md)
+- [Module 04 — IAM Roles & Trust Policies](docs/04-iam-roles-trust-policies.md)
+- [Module 05 — Starter Context](docs/05-module-starter.md)
 ```
 
-Adjust the Module 01/02 link paths to their actual repository locations. Update this plan after each module, recording verified test results, decisions, blockers, and next actions.
+**Check actual repository filenames before committing these links.**
