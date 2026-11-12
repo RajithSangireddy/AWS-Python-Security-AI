@@ -4,6 +4,23 @@
 **Project:** Cloud Security Automation Platform (AWS-first)  
 **Status:** Core implementation working; live collection returned 34 roles; 7/7 module-specific tests reported passed.
 
+## Table of Contents
+
+- [1. Objectives and boundaries](#1-objectives-and-boundaries)
+  - [Existing architecture](#existing-architecture)
+- [2. Design decision: list of role dictionaries](#2-design-decision-list-of-role-dictionaries)
+- [3. IAM paginator and role collection](#3-iam-paginator-and-role-collection)
+- [4. Major debugging lesson: `append()` versus `extend()`](#4-major-debugging-lesson-append-versus-extend)
+- [5. Inspecting IAM trust policies](#5-inspecting-iam-trust-policies)
+- [6. Extraction versus normalization](#6-extraction-versus-normalization)
+- [7. Orchestration: raw and normalized roles](#7-orchestration-raw-and-normalized-roles)
+- [8. Tests and evidence](#8-tests-and-evidence)
+- [9. Questions answered and engineering reasoning](#9-questions-answered-and-engineering-reasoning)
+- [10. Learning assessment at module close](#10-learning-assessment-at-module-close)
+- [11. Deferred tasks and next module](#11-deferred-tasks-and-next-module)
+
+---
+
 ## 1. Objectives and boundaries
 
 Module 04 extends the IAM collector and AWS inventory to include roles and their trust policies. Scope: list roles using IAM pagination; extract role identity and trust statements; keep a predictable data shape; integrate raw and normalized roles; test normal, empty, paginated and failure paths. **Out of scope:** full IAM permission/managed-policy collection (Module 05), evaluating whether a trust policy is risky (security analyzer), cross-account/GCP collectors, deployment and AI.

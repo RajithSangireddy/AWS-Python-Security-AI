@@ -4,6 +4,26 @@
 **Strategy:** AWS-first end-to-end platform; GCP deferred to Phase 2.  
 **Evidence policy:** "Passed" means reported local test success, not an independently audited production release.
 
+## Table of Contents
+
+- [1. Mission](#1-mission)
+- [2. Engineering and learning principles](#2-engineering-and-learning-principles)
+- [3. Current status snapshot](#3-current-status-snapshot)
+- [4. Phase 1 — Revised module roadmap](#4-phase-1-revised-module-roadmap)
+- [5. Verified design and implementation through Module 04](#5-verified-design-and-implementation-through-module-04)
+  - [Module 03 inventory contract](#module-03-inventory-contract)
+  - [Test status and deferred coverage](#test-status-and-deferred-coverage)
+- [6. Phase 2 — GCP expansion (after AWS end-to-end milestone)](#6-phase-2-gcp-expansion-after-aws-end-to-end-milestone)
+- [7. Module 01 and 02 learning record](#7-module-01-and-02-learning-record)
+  - [Module 01 — authentication](#module-01-authentication)
+  - [Module 02 — collection, data structures, architecture](#module-02-collection-data-structures-architecture)
+- [8. Python skill-development checkpoint (2026-11-12)](#8-python-skill-development-checkpoint-2026-11-12)
+- [9. Immediate checklist](#9-immediate-checklist)
+- [10. GitHub workflow](#10-github-workflow)
+- [11. Suggested README documentation links](#11-suggested-readme-documentation-links)
+
+---
+
 ## 1. Mission
 
 Build a portfolio-quality, cost-conscious, read-only AWS security automation platform. Collect IAM/security data, detect and explain risks, report findings, automate tests and deployment, and add a grounded AI assistant. Develop independent Python and software-design skills by implementing features with review rather than receiving full solutions.

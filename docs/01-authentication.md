@@ -7,6 +7,38 @@
 
 ---
 
+## Table of Contents
+
+- [1. Why this module exists](#1-why-this-module-exists)
+- [2. Local setup and identity design](#2-local-setup-and-identity-design)
+  - [Identity flow](#identity-flow)
+- [3. Questions and reasoning from the discussion](#3-questions-and-reasoning-from-the-discussion)
+  - [Q1. Why create a Boto3 session instead of calling AWS CLI commands?](#q1-why-create-a-boto3-session-instead-of-calling-aws-cli-commands)
+  - [Q2. What exactly does `get_caller_identity()` return?](#q2-what-exactly-does-get_caller_identity-return)
+  - [Q3. Why does the AWS profile have a `source_profile`?](#q3-why-does-the-aws-profile-have-a-source_profile)
+  - [Q4. Why did STS return `AccessDenied` even though the profile existed?](#q4-why-did-sts-return-accessdenied-even-though-the-profile-existed)
+  - [Q5. What happens when temporary credentials expire?](#q5-what-happens-when-temporary-credentials-expire)
+  - [Q6. Does the deployed application need `source_profile`?](#q6-does-the-deployed-application-need-source_profile)
+  - [Q7. Why import a function from `auth.py` into `main.py`?](#q7-why-import-a-function-from-authpy-into-mainpy)
+  - [Q8. Why does AWS return `ClientError` if the failure happens on the server?](#q8-why-does-aws-return-clienterror-if-the-failure-happens-on-the-server)
+  - [Q9. What is the difference between `ProfileNotFound`, `InvalidConfigError`, `NoCredentialsError` and `ClientError`?](#q9-what-is-the-difference-between-profilenotfound-invalidconfigerror-nocredentialserror-and-clienterror)
+  - [Q10. What does `raise` do, and why can't we write `raise error_code`?](#q10-what-does-raise-do-and-why-cant-we-write-raise-error_code)
+  - [Q11. Does “preserve the original exception” mean `RuntimeError` is the original?](#q11-does-preserve-the-original-exception-mean-runtimeerror-is-the-original)
+  - [Q12. Is `raise error` the same as `raise RuntimeError(...) from error`?](#q12-is-raise-error-the-same-as-raise-runtimeerror-from-error)
+- [4. Code evolution](#4-code-evolution)
+  - [Initial behavior](#initial-behavior)
+  - [Representative code at the stopping point](#representative-code-at-the-stopping-point)
+  - [Design observations](#design-observations)
+- [5. Troubleshooting chronology](#5-troubleshooting-chronology)
+- [6. What is complete, and what is not](#6-what-is-complete-and-what-is-not)
+  - [Confirmed](#confirmed)
+  - [Still to implement or test](#still-to-implement-or-test)
+- [7. Next module handoff: `02 — IAM Collector`](#7-next-module-handoff-02-iam-collector)
+- [8. Keeping the notes up to date](#8-keeping-the-notes-up-to-date)
+  - [Suggested Git commands (once the repository is initialized)](#suggested-git-commands-once-the-repository-is-initialized)
+
+---
+
 ## 1. Why this module exists
 
 The platform will collect read-only cloud security metadata (starting with AWS IAM users, access keys, roles and trust policies). Before collecting anything, it needs a reliable way to obtain an AWS SDK session, verify which identity is in use, and report authentication failures intelligibly.

@@ -7,6 +7,39 @@
 
 > This journal consolidates the Module 03 design and learning discussions available in our project conversation, including representative code, questions, mistakes, corrections, and testing explanations. It is a detailed reconstruction, not a verbatim transcript. The tests included with this journal have not been executed against your local repository here.
 
+## Table of Contents
+
+- [1. Why this module exists](#1-why-this-module-exists)
+- [2. Design requirements and decisions](#2-design-requirements-and-decisions)
+  - [2.1 Inventory contract](#21-inventory-contract)
+  - [2.2 Collection order](#22-collection-order)
+  - [2.3 Failure policy](#23-failure-policy)
+- [3. Current implementation — representative code](#3-current-implementation-representative-code)
+- [4. Python learning discussions and examples](#4-python-learning-discussions-and-examples)
+  - [4.1 `append()` versus `extend()`](#41-append-versus-extend)
+  - [4.2 `copy()` and `update()` — enriching access-key data](#42-copy-and-update-enriching-access-key-data)
+  - [4.3 Fixing a naming/call mistake](#43-fixing-a-namingcall-mistake)
+  - [4.4 Consistent schemas and downstream analysis](#44-consistent-schemas-and-downstream-analysis)
+  - [4.5 What an assertion does — and does not do](#45-what-an-assertion-does-and-does-not-do)
+- [5. Live AWS integration results](#5-live-aws-integration-results)
+- [6. Testing discussions — Stubber versus mock](#6-testing-discussions-stubber-versus-mock)
+  - [6.1 Why the two tools felt different](#61-why-the-two-tools-felt-different)
+  - [6.2 The first mock-only exercise](#62-the-first-mock-only-exercise)
+  - [6.3 Python scope: `with` versus function](#63-python-scope-with-versus-function)
+  - [6.4 Default mock return values](#64-default-mock-return-values)
+  - [6.5 Call counts and object identity](#65-call-counts-and-object-identity)
+  - [6.6 `side_effect` for successive collector results](#66-side_effect-for-successive-collector-results)
+  - [6.7 Patching the name where it is used](#67-patching-the-name-where-it-is-used)
+  - [6.8 Test-import troubleshooting](#68-test-import-troubleshooting)
+  - [6.9 Testing ownership and our revised learning strategy](#69-testing-ownership-and-our-revised-learning-strategy)
+- [7. Generated orchestration test suite](#7-generated-orchestration-test-suite)
+  - [Run locally](#run-locally)
+- [8. Suggested cleanup before committing](#8-suggested-cleanup-before-committing)
+- [9. Module boundary and what comes next](#9-module-boundary-and-what-comes-next)
+  - [Module 04 design questions to begin with](#module-04-design-questions-to-begin-with)
+
+---
+
 ## 1. Why this module exists
 
 Modules 01 and 02 established the AWS session and individual IAM collection functions. Originally, `main.py` was responsible for the loops that fetched users, fetched their keys, enriched keys with usage, and normalized records. Module 03 moves that coordination into a dedicated orchestration function, so `main.py` becomes a simple entry point.
@@ -111,21 +144,47 @@ Remove any unused imports or temporary debugging output once the integration is 
 
 ### 4.1 `append()` versus `extend()`
 
-**Question:** When a collector returns a list of keys for each user, how do we create one flat collection?
+**Question:** When the inventory already contains access keys from Alice, how do we add Bob's keys without creating a nested list?
+
+Start with **one existing key** and **two new keys**. Both examples begin with the same data so the different results are easy to compare:
 
 ```python
-all_keys = []
-new_keys = [{"AccessKeyId": "KEY1"}, {"AccessKeyId": "KEY2"}]
+existing_keys = [{"AccessKeyId": "ALICE_KEY1"}]
+bobs_keys = [
+    {"AccessKeyId": "BOB_KEY1"},
+    {"AccessKeyId": "BOB_KEY2"},
+]
 
-all_keys.append(new_keys)
-# [[{"AccessKeyId": "KEY1"}, {"AccessKeyId": "KEY2"}]]
+# append(): add Bob's ENTIRE list as ONE element
+with_append = existing_keys.copy()
+with_append.append(bobs_keys)
+print(with_append)
+# [
+#     {"AccessKeyId": "ALICE_KEY1"},
+#     [
+#         {"AccessKeyId": "BOB_KEY1"},
+#         {"AccessKeyId": "BOB_KEY2"},
+#     ],
+# ]
+print(len(with_append))       # 2: a dictionary and a nested list
+print(type(with_append[1]))  # <class 'list'>
 
-all_keys = []
-all_keys.extend(new_keys)
-# [{"AccessKeyId": "KEY1"}, {"AccessKeyId": "KEY2"}]
+# extend(): add EACH of Bob's dictionaries as a separate element
+with_extend = existing_keys.copy()
+with_extend.extend(bobs_keys)
+print(with_extend)
+# [
+#     {"AccessKeyId": "ALICE_KEY1"},
+#     {"AccessKeyId": "BOB_KEY1"},
+#     {"AccessKeyId": "BOB_KEY2"},
+# ]
+print(len(with_extend))       # 3: three dictionaries
+print(type(with_extend[1]))  # <class 'dict'>
 ```
 
-`append()` adds one object, even if that object is a list. `extend()` iterates the supplied iterable and adds each element. For a flat IAM key inventory, use `extend()`.
+**Why it matters:** `append(bobs_keys)` adds Bob's *list itself* as one element, creating a mixed structure (`dict`, then `list`). `extend(bobs_keys)` iterates Bob's list and adds each *dictionary* separately, keeping a flat `list[dict]`. The `.copy()` calls create separate starting lists so the two examples do not affect one another. For the IAM inventory, use `iam_access_keys.extend(list_user_access_keys(iam, username))` to keep all keys at the same level.
+
+**Related Module 04 pitfall:** `extend(role)` is different when `role` is a dictionary: it adds the dictionary's **keys** (strings). To collect roles, use `extend(page["Roles"])`, where the argument is a *list of role dictionaries*, or `append(role)` inside a loop over individual roles.
 
 ### 4.2 `copy()` and `update()` — enriching access-key data
 
@@ -178,6 +237,59 @@ The same example access-key ID is used before and after to show that **one recor
 - We retain raw AWS metadata in `iam_inventory["access_keys"]` and send the enriched copy through `normalize_access_key()` for `iam_inventory["normalized_keys"]`.
 
 This copy-and-enrich pattern will also be useful when combining IAM roles, trust policies, and future security findings.
+
+#### Why pass `key_with_usage` into `normalize_access_key()`?
+
+**Question from our discussion:** After `.update()`, doesn't `key_with_usage` already contain the username, access-key ID, status, creation date, and last-used details? Why create another dictionary?
+
+**Yes.** The enriched dictionary already has the information needed for the analyzer. The purpose of `normalize_access_key()` is **not to fetch more information**; it creates a new record with a predictable, application-defined set of field names. It may select fields rather than copying every AWS attribute.
+
+```python
+# Step 1: Raw AWS key metadata (illustrative date strings)
+key = {
+    "UserName": "alice",
+    "AccessKeyId": "AKIAEXAMPLE00000001",
+    "Status": "Active",
+    "CreateDate": "2026-01-01",
+}
+
+# Step 2: Enrich a copy with usage data
+usage = {
+    "last_used_at": "2026-10-01",
+    "last_used_service": "s3",
+    "last_used_region": "us-east-1",
+}
+key_with_usage = key.copy()
+key_with_usage.update(usage)
+# key_with_usage now contains all 7 fields.
+
+# Step 3: Normalize into the application's field names
+normalized_key = normalize_access_key(key_with_usage)
+# Expected shape for the current normalizer:
+# {
+#     "username": "alice",
+#     "access_key_id": "AKIAEXAMPLE00000001",
+#     "status": "Active",
+#     "created_at": "2026-01-01",
+#     "last_used_at": "2026-10-01",
+#     "last_used_service": "s3",
+#     "last_used_region": "us-east-1",
+# }
+```
+
+| AWS/enriched key | Normalized key | Why |
+|---|---|---|
+| `UserName` | `username` | Consistent application naming |
+| `AccessKeyId` | `access_key_id` | Stable analyzer field |
+| `Status` | `status` | Standardized casing |
+| `CreateDate` | `created_at` | Consistent timestamp name |
+| `last_used_at` | `last_used_at` | Already normalized; retained |
+| `last_used_service` | `last_used_service` | Already normalized; retained |
+| `last_used_region` | `last_used_region` | Already normalized; retained |
+
+**Three distinct objects/roles:** `iam_inventory["access_keys"]` holds the original AWS dictionaries; `key_with_usage` is a temporary enriched **copy**; `iam_inventory["normalized_keys"]` holds new normalized dictionaries. The normalization duplicates some *values*, but serves a different consumer-facing contract. The project intentionally accepts that small duplication to preserve raw evidence and make future analysis less dependent on Boto3 naming. We can reconsider storing both representations if scale or memory use later justifies it.
+
+**Important:** `dict.update()` mutates `key_with_usage` in place; `normalize_access_key()` is a separate transformation. The example uses strings for dates to keep it readable; Boto3 typically supplies `datetime` objects.
 
 ### 4.3 Fixing a naming/call mistake
 

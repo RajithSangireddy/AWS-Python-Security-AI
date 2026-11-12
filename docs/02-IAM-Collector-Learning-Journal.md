@@ -7,6 +7,63 @@
 
 > This is a learning journal as well as a technical record. Code fragments illustrate concepts and may not exactly match the latest local repository. The repository source remains authoritative.
 
+## Table of Contents
+
+- [1. Goals and scope](#1-goals-and-scope)
+  - [Learning objectives](#learning-objectives)
+- [2. Implementation and data flow](#2-implementation-and-data-flow)
+  - [Current workflow](#current-workflow)
+  - [Representative orchestration (conceptual)](#representative-orchestration-conceptual)
+- [3. Core collector functions](#3-core-collector-functions)
+  - [`list_iam_users(iam)`](#list_iam_usersiam)
+  - [`list_user_access_keys(iam, username)`](#list_user_access_keysiam-username)
+  - [`get_access_key_usage(iam, access_key_id)`](#get_access_key_usageiam-access_key_id)
+  - [`normalize_access_key(key)`](#normalize_access_keykey)
+- [4. Questions and design decisions: lists, dictionaries, and indexing](#4-questions-and-design-decisions-lists-dictionaries-and-indexing)
+  - [Q: Why lists for IAM users and access keys, but a dictionary for last-used details?](#q-why-lists-for-iam-users-and-access-keys-but-a-dictionary-for-last-used-details)
+  - [Q: Why not use dictionaries for all three?](#q-why-not-use-dictionaries-for-all-three)
+  - [Q: Does Python automatically use the first field, such as `UserName`, as the dictionary key?](#q-does-python-automatically-use-the-first-field-such-as-username-as-the-dictionary-key)
+  - [Q: What about IAM roles?](#q-what-about-iam-roles)
+- [5. Questions and design decisions: correlating access-key usage](#5-questions-and-design-decisions-correlating-access-key-usage)
+  - [Q: How does the last-used information map back to the correct access key?](#q-how-does-the-last-used-information-map-back-to-the-correct-access-key)
+  - [Q: Why `.copy()` before `.update()`?](#q-why-copy-before-update)
+  - [Q: Should `main.py` handle correlation forever?](#q-should-mainpy-handle-correlation-forever)
+- [6. Questions and design decisions: exceptions and completeness](#6-questions-and-design-decisions-exceptions-and-completeness)
+  - [Q: Why separate `ClientError` and `BotoCoreError`?](#q-why-separate-clienterror-and-botocoreerror)
+  - [Q: Why initialize `users = []`, `iam_keys = []`, or `last_used_details = {}` before `try`?](#q-why-initialize-users-iam_keys-or-last_used_details-before-try)
+  - [Q: If page 3 fails after pages 1 and 2 were appended, does the caller receive those records?](#q-if-page-3-fails-after-pages-1-and-2-were-appended-does-the-caller-receive-those-records)
+  - [Q: What if collecting access keys for the 75th of 100 users fails?](#q-what-if-collecting-access-keys-for-the-75th-of-100-users-fails)
+  - [Q: What about zero users or zero access keys?](#q-what-about-zero-users-or-zero-access-keys)
+- [7. Python environment and Interactive Window troubleshooting](#7-python-environment-and-interactive-window-troubleshooting)
+- [8. Testing architecture: pytest and Botocore Stubber](#8-testing-architecture-pytest-and-botocore-stubber)
+  - [Q: Why create an IAM client with dummy credentials?](#q-why-create-an-iam-client-with-dummy-credentials)
+  - [Q: What is the difference between `print`, `if`, and `assert` in a test?](#q-what-is-the-difference-between-print-if-and-assert-in-a-test)
+  - [Q: Why is the fake response a dictionary with a `"Users"` list?](#q-why-is-the-fake-response-a-dictionary-with-a-users-list)
+  - [Q: How do `add_response`, the paginator, and Stubber interact?](#q-how-do-add_response-the-paginator-and-stubber-interact)
+  - [Q: For two pages, do we register one or two Stubber responses?](#q-for-two-pages-do-we-register-one-or-two-stubber-responses)
+  - [Experiment: deliberately mismatched markers](#experiment-deliberately-mismatched-markers)
+  - [Experiment: stop after Page 1](#experiment-stop-after-page-1)
+  - [Q: What do our test assertions verify?](#q-what-do-our-test-assertions-verify)
+  - [Q: How does a test verify expected `AccessDenied`?](#q-how-does-a-test-verify-expected-accessdenied)
+- [9. Verified test results and deferred work](#9-verified-test-results-and-deferred-work)
+- [10. Design principles to carry forward](#10-design-principles-to-carry-forward)
+- [11. Module boundary and next chat](#11-module-boundary-and-next-chat)
+- [12. Git checklist](#12-git-checklist)
+- [13. AWS API response samples and Python data-structure walkthroughs](#13-aws-api-response-samples-and-python-data-structure-walkthroughs)
+  - [Example A — `list_users`: outer dictionary, inner list of dictionaries](#example-a-list_users-outer-dictionary-inner-list-of-dictionaries)
+  - [Example B — Two paginator pages and the continuation marker](#example-b-two-paginator-pages-and-the-continuation-marker)
+  - [Example C — `list_access_keys`: list of key metadata dictionaries](#example-c-list_access_keys-list-of-key-metadata-dictionaries)
+  - [Example D — `get_access_key_last_used`: nested AWS response to flat usage dictionary](#example-d-get_access_key_last_used-nested-aws-response-to-flat-usage-dictionary)
+  - [Example E — Merge metadata and usage without changing the original](#example-e-merge-metadata-and-usage-without-changing-the-original)
+  - [Example F — Normalized access-key record: one dictionary; inventory: list of dictionaries](#example-f-normalized-access-key-record-one-dictionary-inventory-list-of-dictionaries)
+  - [Example G — Explicitly build a dictionary indexed by username](#example-g-explicitly-build-a-dictionary-indexed-by-username)
+  - [Example H — Stubber: fake response, request parameters, and pagination assertions](#example-h-stubber-fake-response-request-parameters-and-pagination-assertions)
+  - [Example I — Expected AWS error: successful negative test](#example-i-expected-aws-error-successful-negative-test)
+  - [Example J — Incomplete pagination must not look like a complete inventory](#example-j-incomplete-pagination-must-not-look-like-a-complete-inventory)
+  - [Quick reference: which structure did we choose?](#quick-reference-which-structure-did-we-choose)
+
+---
+
 ## 1. Goals and scope
 
 Build a read-only Python/Boto3 AWS IAM collector that retrieves IAM users, their access keys, and last-used metadata; normalizes results; handles AWS errors without silently returning incomplete inventory; and provides a foundation for later security analysis. Reuse the authenticated IAM client from Module 01 rather than creating new sessions inside each collector function.
