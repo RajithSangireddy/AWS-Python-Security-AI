@@ -1,4 +1,4 @@
-
+from botocore.exceptions import ClientError
 from botocore.exceptions import BotoCoreError
 from src.error_handler import error_handler
 
@@ -10,7 +10,7 @@ def list_iam_users(iam):
         pages = paginator.paginate()
 
         # the pages is dictionary
-        
+
         #for page in pages:
         #    print("Page type:", type(page))
         #    print("Page fields:", page.keys())
@@ -23,7 +23,7 @@ def list_iam_users(iam):
                                 # page = {
                                 #         "Users": [
                                 #                  {"UserName": "alice"},
-                                #                  {"UserName": "bob"}                
+                                #                  {"UserName": "bob"}
                                 #                   ],
                                 #          "istruncated" : false
                                 #        }
@@ -32,7 +32,7 @@ def list_iam_users(iam):
                 #fetching the first element from the list of dictionaries in this case Users which is another dictionary
                 users.append(user)
                 print(f"Here is the username: {user['UserName']}" )
-    
+
     except ClientError as error:
         error_handler(error, "list_users")
 
@@ -44,11 +44,11 @@ def list_iam_users(iam):
 
 def list_user_access_keys(iam, username):
     iam_keys = []
-    try: 
+    try:
         paginator = iam.get_paginator("list_access_keys")
         pages = paginator.paginate(UserName=username)
 
-        
+
         for page in pages:
             for keys in page["AccessKeyMetadata"]:
                 iam_keys.append(keys)
@@ -68,13 +68,13 @@ def get_access_key_usage(iam, access_key_id):
     try:
         response = iam.get_access_key_last_used(AccessKeyId=access_key_id) # it returns a dict
         usage = response["AccessKeyLastUsed"]  # this also returns a dictionary
-        last_used_date = usage.get("LastUsedDate") 
+        last_used_date = usage.get("LastUsedDate")
         last_used_service = usage.get("ServiceName")
         last_used_region = usage.get("Region")
         ## the above is similar to usage["LastUsedDate"] this, but if the key was not used, this will throw keyError, hence, we used .get
-        
+
         last_used_details["last_used_at"] = last_used_date
-        
+
         if last_used_service == "N/A":
             last_used_details["last_used_service"] = None
         else:
@@ -90,7 +90,7 @@ def get_access_key_usage(iam, access_key_id):
 
     except BotoCoreError as error:
         raise RuntimeError(f"AWS SDK error: {error}") from error
- 
+
     return last_used_details
 
 
@@ -106,4 +106,38 @@ def normalize_access_key(key):
     }
     #print(f"here is normalized key : {normalized_key}")
     return normalized_key
-    
+
+def list_iam_roles(iam):
+
+    iam_roles = []
+    try:
+        paginator = iam.get_paginator("list_roles")
+        pages = paginator.paginate()
+
+        for page in pages:
+            iam_roles.extend(page["Roles"])
+            #this is same as
+            #for role in page["Roles"]:
+            #  iam_roles.append(role)
+
+    except ClientError as error:
+        error_handler(error, "list_roles")
+
+    except BotoCoreError as error:
+        raise RuntimeError(f"AWS SDK error: {error}") from error
+
+    return iam_roles
+
+def normalize_role_trust_policy(role):
+
+    normalized_roles = {}
+
+    normalized_roles["role_name"] = role["RoleName"]
+    normalized_roles["role_arn"] = role["Arn"]
+    statements = role["AssumeRolePolicyDocument"]["Statement"]
+    if isinstance(statements, dict):
+        statements = [statements]
+
+    normalized_roles["trust_statements"] = statements
+
+    return normalized_roles

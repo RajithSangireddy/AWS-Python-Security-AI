@@ -22,12 +22,13 @@ def test_empty_iam_inventory():
     """No users should produce all three keys, each with an empty list."""
     with patch(f"{MODULE}.list_iam_users", return_value=[]) as mock_users, \
          patch(f"{MODULE}.list_user_access_keys") as mock_keys, \
+         patch(f"{MODULE}.list_iam_roles", return_value=[]) as mock_roles, \
          patch(f"{MODULE}.get_access_key_usage") as mock_usage, \
          patch(f"{MODULE}.normalize_access_key") as mock_normalize:
         iam = Mock(name="iam_client")
         inventory = collect_aws_iam_inventory(iam)
 
-    assert inventory == {"users": [], "access_keys": [], "normalized_keys": []}
+    assert inventory == {"users": [], "access_keys": [], "normalized_keys": [], "roles": [], "normalized_roles": [] }
     mock_users.assert_called_once_with(iam)
     mock_keys.assert_not_called()
     mock_usage.assert_not_called()
@@ -53,8 +54,10 @@ def test_multiple_users_and_access_keys():
 
     with patch(f"{MODULE}.list_iam_users", return_value=users) as mock_users, \
          patch(f"{MODULE}.list_user_access_keys", side_effect=[keys, []]) as mock_keys, \
+         patch(f"{MODULE}.list_iam_roles", return_value=[]) as mock_roles, \
          patch(f"{MODULE}.get_access_key_usage", side_effect=usage) as mock_usage, \
          patch(f"{MODULE}.normalize_access_key", side_effect=normalized) as mock_normalize:
+
         inventory = collect_aws_iam_inventory(iam)
 
     assert inventory["users"] == users
@@ -81,11 +84,12 @@ def test_users_with_no_access_keys():
     users = [{"UserName": "alice"}]
     with patch(f"{MODULE}.list_iam_users", return_value=users), \
          patch(f"{MODULE}.list_user_access_keys", return_value=[]) as mock_keys, \
+         patch(f"{MODULE}.list_iam_roles", return_value=[]) as mock_roles, \
          patch(f"{MODULE}.get_access_key_usage") as mock_usage, \
          patch(f"{MODULE}.normalize_access_key") as mock_normalize:
         inventory = collect_aws_iam_inventory(iam)
 
-    assert inventory == {"users": users, "access_keys": [], "normalized_keys": []}
+    assert inventory == {"users": users, "access_keys": [], "normalized_keys": [], "roles": [], "normalized_roles": [] }
     mock_keys.assert_called_once_with(iam, "alice")
     mock_usage.assert_not_called()
     mock_normalize.assert_not_called()
